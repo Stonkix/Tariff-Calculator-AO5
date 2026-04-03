@@ -1,9 +1,220 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta http-equiv="refresh" content="0; url=calc-index.html" />
-  </head>
-  <body>
-    <p>Загрузка калькулятора... <a href="calc-index.html">нажмите здесь</a>, если ничего не происходит.</p>
-  </body>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Помощник подбора тарифов Астрал.ОФД</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="calc-style.css">
+</head>
+<body>
+
+<div class="page-header">
+  <div class="logo-mark">
+    <svg viewBox="0 0 24 24"><path d="M4 4h6v6H4V4zm10 0h6v6h-6V4zM4 14h6v6H4v-6zm10 3a3 3 0 1 0 6 0 3 3 0 0 0-6 0z"/></svg>
+  </div>
+  <div class="page-header-text">
+    <h1>Помощник подбора тарифов Астрал Отчет 5.0</h1>
+    <p>Рассчитайте стоимость подключения за несколько кликов</p>
+  </div>
+</div>
+
+<div class="calc-card">
+
+  <div class="top-tabs">
+    <button class="top-tab active" data-top="solo">
+      Одна организация
+      <span class="tsub">ЮЛ или ИП</span>
+    </button>
+    <button class="top-tab" data-top="gk">
+      Группа компаний
+      <span class="tsub">от 3 организаций</span>
+    </button>
+    <button class="top-tab" data-top="ub">
+      Уп. бухгалтерия
+      <span class="tsub">аутсорсинг учёта</span>
+    </button>
+  </div>
+
+  <div id="dyn"><div id="loading-msg">⏳ Загрузка данных о тарифах...</div></div>
+
+  <div id="addons-wrap" style="display:none;">
+    <div class="divider"></div>
+    <div class="slabel">Дополнительные услуги</div>
+    <div class="addon-grid">
+      <div class="addon-card" id="adn-ext">
+        <div class="addon-hd">
+          <span class="addon-title">Дополнительные направления / расширения</span>
+          <label class="sw">
+            <input type="checkbox" onchange="CalcApp.toggleAddon('adn-ext')">
+            <span class="sw-t"></span>
+          </label>
+        </div>
+        <div class="addon-variants">
+          <div class="vrow">
+            <span>ИП/ФЛ — +1 направление</span>
+            <input type="number" id="ext-ip" min="0" placeholder="0"
+                   onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();"
+                   oninput="CalcApp.calc()">
+          </div>
+          <div class="vrow">
+            <span>ЮЛ — +1 направление</span>
+            <input type="number" id="ext-ul" min="0" placeholder="0"
+                   onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();"
+                   oninput="CalcApp.calc()">
+          </div>
+          <div class="vrow">
+            <span>Доп. ИФНС</span>
+            <input type="number" id="ext-ifns" min="0" placeholder="0"
+                   onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();"
+                   oninput="CalcApp.calc()">
+          </div>
+          <div class="vrow">
+            <span>Доп. Росстат</span>
+            <input type="number" id="ext-stat" min="0" placeholder="0"
+                   onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();"
+                   oninput="CalcApp.calc()">
+          </div>
+          <div class="vrow">
+            <span>ФСРАР</span>
+            <input type="number" id="ext-fsrar" min="0" placeholder="0"
+                   onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();"
+                   oninput="CalcApp.calc()">
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="details-area">
+    <div class="dh">Детализация</div>
+    <div class="db" id="det-body">Введите данные для расчёта...</div>
+  </div>
+
+  <div class="disc-row">
+    <label>Дополнительная скидка</label>
+    <div class="disc-inputs">
+      <select id="disc-type" onchange="CalcApp.calc()">
+        <option value="pct">Процент %</option>
+        <option value="rub">Рубли ₽</option>
+      </select>
+      <input type="number" id="disc-val" placeholder="0" min="0"
+             onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();"
+             oninput="CalcApp.calc()">
+    </div>
+  </div>
+
+  <div class="result-box">
+    <div class="r-label">Итоговая стоимость:</div>
+    <div class="r-price" id="r-price">0 ₽</div>
+    <div class="r-disc"  id="r-disc"></div>
+    <div class="cg">
+      <input type="text" id="c-name"   placeholder="Ваше ФИО">
+      <input type="text" id="c-client" placeholder="Название компании клиента">
+      <input type="text" id="c-phone"  placeholder="Телефон партнёра">
+      <input type="text" id="c-email"  placeholder="Email партнёра">
+    </div>
+    <button class="btn-pdf" id="btn-pdf" disabled>📄 &nbsp;Скачать коммерческое предложение</button>
+  </div>
+
+</div>
+
+
+<!-- ШАБЛОНЫ -->
+
+<template id="tpl-solo">
+  <div class="frow">
+    <label>Регион</label>
+    <select id="sol-reg"><option value="" disabled selected>Выберите регион</option></select>
+  </div>
+  <div class="g2" style="margin-bottom:16px;">
+    <div>
+      <div class="sublabel">Тип организации</div>
+      <div class="tg" id="sol-own">
+        <button class="tb active" data-v="ul">ЮЛ</button>
+        <button class="tb"        data-v="ip">ИП / ФЛ</button>
+      </div>
+    </div>
+  </div>
+  <div class="slabel">Выберите тариф</div>
+  <div class="tariff-grid" id="sol-tariffs"></div>
+</template>
+
+<template id="tpl-gk">
+  <div class="inner-tabs" id="gk-tabs">
+    <button class="inner-tab active" data-m="fast">Быстрый</button>
+    <button class="inner-tab"        data-m="detailed">Подробный</button>
+    <button class="inner-tab"        data-m="addon">Добавить в ГК</button>
+  </div>
+  <div id="gk-inner"></div>
+</template>
+
+<template id="tpl-fast">
+  <div id="gk-tariff-row" style="display:none;"></div>
+  <div class="ft-head">
+    <div>РЕГИОН</div>
+    <div style="text-align:center">ЮЛ</div>
+    <div style="text-align:center">ИП</div>
+    <div></div>
+  </div>
+  <div id="fr-rows"></div>
+  <button class="btn-add" id="btn-add-fast">＋ Добавить регион</button>
+</template>
+
+<template id="tpl-detailed">
+  <div class="exist-row" id="ex-row" style="display:none;">
+    <label>Уже подключено компаний в ГК</label>
+    <input type="number" id="ex-cnt" min="0" value="0"
+           onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();"
+           oninput="CalcApp.setExist(parseInt(this.value)||0)">
+  </div>
+  <div id="det-cards"></div>
+  <button class="btn-add" id="btn-add-det">＋ Добавить компанию</button>
+</template>
+
+<template id="tpl-cc">
+  <div class="cc">
+    <button class="cc-remove" style="display:none;">&times;</button>
+    <div class="g2" style="margin-bottom:10px;">
+      <input class="cc-name cc-inner-input" type="text" placeholder="Название компании">
+      <input class="cc-inn  cc-inner-input" type="text" placeholder="ИНН">
+    </div>
+    <div class="g2" style="margin-bottom:10px;">
+      <select class="cc-reg cc-inner-select"></select>
+      <div class="tg cc-own">
+        <button class="tb active" data-v="ul">ЮЛ</button>
+        <button class="tb"        data-v="ip">ИП / ФЛ</button>
+      </div>
+    </div>
+    <div style="margin:0;">
+      <div class="sublabel" style="margin-bottom:6px;">Тариф</div>
+      <select class="cc-tariff cc-inner-select"></select>
+    </div>
+  </div>
+</template>
+
+<template id="tpl-ub">
+  <div class="ub-form">
+    <div class="frow">
+      <label>Регион</label>
+      <select id="ub-reg"><option value="" disabled selected>Выберите регион</option></select>
+    </div>
+    <div class="g2">
+      <div class="frow" style="margin-bottom:0;">
+        <label>Кол-во обслуживаемых организаций</label>
+        <input type="number" id="ub-orgs" min="1" placeholder="1" value="1"
+               onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();">
+      </div>
+      <div class="frow" style="margin-bottom:0;">
+        <label>Кол-во отчётов в месяц (прогноз)</label>
+        <input type="number" id="ub-reports" min="0" placeholder="0" value="0"
+               onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();">
+      </div>
+    </div>
+    <div class="ub-info" id="ub-info" style="display:none;"></div>
+  </div>
+</template>
+
+<script src="calc-script.js"></script>
+</body>
 </html>
