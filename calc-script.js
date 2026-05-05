@@ -6,7 +6,7 @@
 
 // ── Маппинг колонок JSON ──────────────────────────────────────────────────
 const TARIFF_MAP = {
-  'zero':     { ip: 'Zero\n(Нулевка)',                      ul: null                           },
+  'zero':     { ip: 'Zero\n(Нулевка)',                      ul: 'Zero\n(Нулевка)'                    },
   'uno':      { ip: 'Uno(Минимальный)',                     ul: 'Column5'                      },
   'tre_s':    { ip: 'Tre S(Упрощенный)',                    ul: 'Column7'                      },
   'tre_o':    { ip: null,                                   ul: 'Tre O(Базовый) \n25/26'       },
@@ -17,21 +17,20 @@ const TARIFF_MAP = {
 };
 
 // Карточки тарифов (Solo). Оптимальный — одна карточка-группа
-// id: базовый ключ карточки; durations: варианты срока (у остальных нет)
+// owns: для каких типов организации доступна карточка
 const TARIFF_CARDS = [
   {
-    id: 'optimal', name: 'Оптимальный', sub: '4 направления',
+    id: 'optimal', name: 'Оптимальный', sub: 'Любая СНО, 4 направления',
     owns: ['ul','ip'],
     durations: [
-      { id: 'opt3',  label: '3 мес'  },
-      { id: 'opt6',  label: '6 мес'  },
       { id: 'opt12', label: '12 мес' },
       { id: 'opt24', label: '24 мес' },
     ]
   },
-  { id: 'tre_o', name: 'Базовый',    sub: 'ОСНО · 12 мес',           owns: ['ul']       },
-  { id: 'tre_s', name: 'Упрощенный', sub: '3 направления · 12 мес',  owns: ['ul','ip']  },
-  { id: 'uno',   name: 'Минимальный',sub: '1 направление · 12 мес',  owns: ['ul','ip']  },
+  { id: 'tre_o', name: 'Базовый',    sub: 'Любая СНО, 3 направления · 12 мес',  owns: ['ul']       },
+  { id: 'tre_s', name: 'Упрощенный', sub: 'Спецрежимы, 3 направления · 12 мес', owns: ['ul','ip']  },
+  { id: 'uno',   name: 'Минимальный',sub: 'Любая СНО, 1 направление · 12 мес',  owns: ['ul','ip']  },
+  { id: 'zero',  name: 'Нулёвка',    sub: 'Нулевая отчётность · 12 мес',        owns: ['ul','ip']  },
 ];
 
 const GK_RANGES = [
@@ -118,7 +117,7 @@ async function loadData() {
     $('addons-wrap').style.display = '';
     $('btn-pdf').disabled = false;
 
-    ['c-name','c-client','c-phone','c-email'].forEach(function(id){
+    ['c-org','c-name','c-client','c-phone','c-email'].forEach(function(id){
       var el=$(id), sv=localStorage.getItem('ao5_'+id);
       if(sv && el) el.value=sv;
       if(el) el.oninput=function(e){ localStorage.setItem('ao5_'+id, e.target.value); };
@@ -144,7 +143,7 @@ function renderSolo(dyn) {
   var n = $('tpl-solo').content.cloneNode(true);
   var regSel = n.getElementById('sol-reg');
   regSel.innerHTML = regOpts(S.solo.reg);
-  regSel.onchange = function(e){ S.solo.reg=e.target.value; refreshTariffCards(); calc(); };
+  regSel.onchange = function(e){ S.solo.reg=e.target.value; refreshTariffCards(); refreshAddonRows(); calc(); };
   n.querySelectorAll('#sol-own .tb').forEach(function(b){
     b.classList.toggle('active', b.dataset.v===S.solo.own);
     b.onclick=function(){
@@ -155,11 +154,21 @@ function renderSolo(dyn) {
         if (!card || !card.owns.includes(S.solo.own)) { S.solo.cardId=null; S.solo.durId=null; }
       }
       document.querySelectorAll('#sol-own .tb').forEach(function(x){ x.classList.toggle('active',x.dataset.v===S.solo.own); });
-      refreshTariffCards(); calc();
+      refreshTariffCards(); refreshAddonRows(); calc();
     };
   });
   dyn.appendChild(n);
   refreshTariffCards();
+  refreshAddonRows();
+}
+
+// Скрывает/показывает строки доп. расширений в зависимости от типа организации (Solo)
+function refreshAddonRows() {
+  if (S.top !== 'solo') return;
+  var rowIp = document.getElementById('vrow-ext-ip');
+  var rowUl = document.getElementById('vrow-ext-ul');
+  if (rowIp) rowIp.style.display = S.solo.own === 'ip' ? '' : 'none';
+  if (rowUl) rowUl.style.display = S.solo.own === 'ul' ? '' : 'none';
 }
 
 function refreshTariffCards() {
@@ -353,7 +362,7 @@ function calc() {
   var priceEl=$('r-price'), discEl=$('r-disc'), detailEl=$('det-body');
   if(!priceEl) return;
 
-  var total=0, lines=[], gkBase=0, gkDisc=0;
+  var total=0, lines=[], gkBase=0, gkDisc=0, baseTotal=0;
 
   if(S.top==='solo'){
     discEl.textContent='';
@@ -443,14 +452,17 @@ function calc() {
 
   // Глобальные расширения (Solo и UB, а также GK Fast)
   if(S.top!=='gk' || S.gkMode==='fast'){
+    baseTotal = total; // скидка только на основную лицензию
     total+=calcGlobalExt(lines);
+  } else {
+    baseTotal = total;
   }
 
-  // Доп. скидка
+  // Доп. скидка — применяется только к основной лицензии
   var dv=parseFloat($('disc-val')&&$('disc-val').value)||0;
   var dt=($('disc-type')&&$('disc-type').value)||'pct';
-  if(dv>0&&total>0){
-    var da=dt==='pct'?total*(dv/100):dv;
+  if(dv>0&&baseTotal>0){
+    var da=dt==='pct'?baseTotal*(dv/100):Math.min(dv,baseTotal);
     lines.push('\nДоп. скидка '+(dt==='pct'?dv+'%':'(руб)')+' | −'+fmt(da));
     total=Math.max(0,total-da);
   }
@@ -505,7 +517,7 @@ document.addEventListener('DOMContentLoaded', function(){
   document.querySelectorAll('.top-tab').forEach(function(b){
     b.onclick=function(){
       document.querySelectorAll('.top-tab').forEach(function(x){ x.classList.remove('active'); });
-      b.classList.add('active'); S.top=b.dataset.top; render();
+      b.classList.add('active'); S.top=b.dataset.top; render(); refreshAddonRows();
     };
   });
   $('btn-pdf').onclick=function(){ alert('PDF будет доступен в следующей версии.'); };

@@ -31,8 +31,8 @@
       <span class="tsub">от 3 организаций</span>
     </button>
     <button class="top-tab" data-top="ub">
-      Уп. бухгалтерия
-      <span class="tsub">аутсорсинг учёта</span>
+      Уполномоченная бухгалтерия
+      <span class="tsub">бухгалтерские фирмы</span>
     </button>
   </div>
 
@@ -51,13 +51,13 @@
           </label>
         </div>
         <div class="addon-variants">
-          <div class="vrow">
+          <div class="vrow" id="vrow-ext-ip">
             <span>ИП/ФЛ — +1 направление</span>
             <input type="number" id="ext-ip" min="0" placeholder="0"
                    onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();"
                    oninput="CalcApp.calc()">
           </div>
-          <div class="vrow">
+          <div class="vrow" id="vrow-ext-ul">
             <span>ЮЛ — +1 направление</span>
             <input type="number" id="ext-ul" min="0" placeholder="0"
                    onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();"
@@ -109,6 +109,7 @@
     <div class="r-price" id="r-price">0 ₽</div>
     <div class="r-disc"  id="r-disc"></div>
     <div class="cg">
+      <input type="text" id="c-org"    placeholder="Название вашей организации">
       <input type="text" id="c-name"   placeholder="Ваше ФИО">
       <input type="text" id="c-client" placeholder="Название компании клиента">
       <input type="text" id="c-phone"  placeholder="Телефон партнёра">
