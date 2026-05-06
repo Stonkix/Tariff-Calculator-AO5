@@ -3,11 +3,30 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Помощник подбора тарифов Астрал.ОФД</title>
+<title>Помощник подбора тарифов Астрал.Отчет 5.0</title>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="calc-style.css">
 </head>
 <body>
+
+<div id="calc-assets" style="display:none;"
+  data-main-header-src="pdf_header_main.jpg"
+  data-main-footer-src-1="pdf_footer_main_1.jpg"
+  data-main-footer-src-2="pdf_footer_main_2.jpg"
+  data-main-footer-src-3="pdf_footer_main_3.jpg"
+  data-main-footer-src-4="pdf_footer_main_4.jpg"
+  data-main-footer-src-5="pdf_footer_main_5.jpg"
+  data-main-footer-src-6="pdf_footer_main_6.jpg"
+  data-main-footer-src-7="pdf_footer_main_7.jpg"
+  data-ub-header-src="pdf_header_ub.png"
+  data-ub-footer-src-1="pdf_footer_ub_1.jpg"
+  data-ub-footer-src-2="pdf_footer_ub_2.jpg"
+  data-ub-footer-src-3="pdf_footer_ub_3.jpg"
+  data-ub-footer-src-4="pdf_footer_ub_4.jpg"
+  data-ub-footer-src-5="pdf_footer_ub_5.jpg"
+  data-ub-footer-src-6="pdf_footer_ub_6.jpg"
+  data-ub-footer-src-7="pdf_footer_ub_7.jpg">
+</div>
 
 <div class="page-header">
   <div class="logo-mark">
@@ -109,11 +128,11 @@
     <div class="r-price" id="r-price">0 ₽</div>
     <div class="r-disc"  id="r-disc"></div>
     <div class="cg">
-      <input type="text" id="c-org"    placeholder="Название вашей организации">
+      <input type="text" id="c-org"    placeholder="Наименование организации партнера">
       <input type="text" id="c-name"   placeholder="Ваше ФИО">
-      <input type="text" id="c-client" placeholder="Название компании клиента">
       <input type="text" id="c-phone"  placeholder="Телефон партнёра">
       <input type="text" id="c-email"  placeholder="Email партнёра">
+      <input type="text" id="c-client" placeholder="Название компании клиента">
     </div>
     <button class="btn-pdf" id="btn-pdf" disabled>📄 &nbsp;Скачать коммерческое предложение</button>
   </div>
@@ -216,6 +235,8 @@
   </div>
 </template>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="calc-script.js"></script>
 </body>
 </html>

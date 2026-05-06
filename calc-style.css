@@ -308,6 +308,7 @@ body {
   color: var(--text); outline: none; background: #fff; transition: border-color .2s; width: 100%;
 }
 .cg input:focus { border-color: var(--brand); }
+#c-client { grid-column: span 2; }
 
 .btn-pdf {
   width: 100%; padding: 16px;
@@ -326,6 +327,7 @@ body {
 /* ── Media ───────────────────────────────────────────────────── */
 @media (max-width: 580px) {
   .g2, .cg             { grid-template-columns: 1fr; }
+  #c-client            { grid-column: auto; }
   .ft-head, .ft-row    { grid-template-columns: 1fr 60px 60px 34px; }
   .calc-card           { padding: 20px 16px; }
   .r-price             { font-size: 34px; }

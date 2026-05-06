@@ -433,8 +433,9 @@ function calc() {
       var rc=S.ub.reports||0;
       if(rc>0){
         var rk=rc<=200?'Column35':rc<=500?'Column36':rc<=1000?'Column37':'Column38';
-        var rate=p(ubRow,rk), minP=p(ubRow,'Column39'), fee=Math.max(rate*rc,minP);
-        total+=fee; lines.push('Отчёты: '+rc+' × '+fmt(rate)+' (мин. '+fmt(minP)+') = '+fmt(fee));
+        var rate=p(ubRow,rk), minP=p(ubRow,'Column39'), rawFee=rate*rc, fee=Math.max(rawFee,minP);
+        var minNote=(minP>0&&rawFee<minP)?' (минимальный платеж)':'';
+        total+=fee; lines.push('Отчёты · '+rc+' шт. × '+fmt(rate)+' | '+fmt(fee)+minNote);
       }
       var info=$('ub-info');
       if(info){
@@ -482,6 +483,382 @@ function calcGlobalExt(lines){
   return add;
 }
 
+// PDF
+function initPDF() {
+  var pdfBtn = $('btn-pdf');
+  if (!pdfBtn) return;
+  pdfBtn.onclick = async function() {
+    pdfBtn.disabled = true;
+    var originalText = pdfBtn.textContent;
+    pdfBtn.textContent = 'Формируем PDF...';
+    try {
+      await buildPDF();
+    } catch (e) {
+      console.error('Ошибка PDF:', e);
+      alert('Ошибка PDF: ' + e.message);
+    } finally {
+      pdfBtn.disabled = false;
+      pdfBtn.textContent = originalText;
+    }
+  };
+}
+
+function escHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function getPdfAssets(mode) {
+  var assets = document.getElementById('calc-assets');
+  if (!assets) throw new Error('Не найден блок ассетов #calc-assets');
+  var prefix = mode === 'ub' ? 'ub' : 'main';
+  var headerSrc = assets.getAttribute('data-' + prefix + '-header-src') || '';
+  var footerSrcs = [];
+  for (var i = 1; i <= 7; i++) {
+    var src = assets.getAttribute('data-' + prefix + '-footer-src-' + i);
+    if (src) footerSrcs.push(src);
+  }
+  return { headerSrc: headerSrc, footerSrcs: footerSrcs };
+}
+
+async function buildPDF() {
+  var jsPDFClass = (window.jspdf && window.jspdf.jsPDF) || window.jsPDF;
+  if (!jsPDFClass) throw new Error('jsPDF не найден');
+  if (typeof html2canvas === 'undefined') throw new Error('html2canvas не найден');
+
+  var mode = S.top === 'ub' ? 'ub' : 'main';
+  var assets = getPdfAssets(mode);
+
+  var PAGE_W = 794;
+  var PAGE_H = 1122;
+  var PAD = 50;
+  var BOTTOM_PAD = 25;
+  var FOOTER_GAP = 25;
+  var ACCENT = '#008ec0';
+  var MF = "font-family:'Nunito',sans-serif;box-sizing:border-box;";
+
+  var totalText = (($('r-price') && $('r-price').innerText) || '').trim();
+  var discText = (($('r-disc') && $('r-disc').innerText) || '').trim();
+  var clientName = (($('c-client') && $('c-client').value) || '').trim();
+  var managerName = (($('c-name') && $('c-name').value) || '').trim();
+  var managerPhone = (($('c-phone') && $('c-phone').value) || '').trim();
+  var managerEmail = (($('c-email') && $('c-email').value) || '').trim();
+  var lines = ((($('det-body') && $('det-body').innerText) || '')
+    .split('\n')
+    .map(function(s){ return s.trim(); })
+    .filter(Boolean));
+
+
+  var waitImg = function(img) {
+    return new Promise(function(res) {
+      if (!img.src) return res();
+      if (img.complete && img.naturalHeight > 0) return res();
+      img.onload = img.onerror = res;
+    });
+  };
+  var mount = function(el) {
+    el.style.position = 'absolute';
+    el.style.top = '0';
+    el.style.left = '-9999px';
+    el.style.zIndex = '-1';
+    document.body.appendChild(el);
+  };
+  var unmount = function(el) {
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  };
+  var toCanvas = function(el) {
+    return html2canvas(el, {
+      scale: 5,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      width: PAGE_W,
+      windowWidth: PAGE_W
+    });
+  };
+  var measureHeight = function(html) {
+    var div = document.createElement('div');
+    div.style.cssText = 'width:' + PAGE_W + 'px;position:absolute;top:0;left:-9999px;visibility:hidden;';
+    div.innerHTML = html;
+    document.body.appendChild(div);
+    var h = div.getBoundingClientRect().height;
+    document.body.removeChild(div);
+    return h;
+  };
+
+  var rowHTML = function(line) {
+    if (line.indexOf('|') === -1) {
+      return '<tr><td colspan="2" style="padding:3px 0;font-size:9pt;color:#999;' + MF + '">' + escHtml(line) + '</td></tr>';
+    }
+    var parts = line.split('|').map(function(x){ return x.trim(); }).filter(Boolean);
+    if (!parts.length) return '';
+    var price = parts[parts.length - 1];
+    var label = parts.slice(0, -1).join(' | ');
+    return '<tr>' +
+      '<td style="padding:5px 0;border-bottom:1px solid #eee;font-size:9.5pt;color:#444;' + MF + '">' + escHtml(label) + '</td>' +
+      '<td style="padding:5px 0;border-bottom:1px solid #eee;text-align:right;font-weight:800;color:' + ACCENT + ';font-size:9.5pt;white-space:nowrap;' + MF + '">' + escHtml(price) + '</td>' +
+      '</tr>';
+  };
+
+  var summaryText = mode === 'ub'
+    ? 'Лицензия'
+    : (clientName ? 'Стоимость для ' + clientName + ':' : 'Итоговая стоимость:');
+
+  var summaryHTML = function() {
+    var disc = discText
+      ? '<div style="color:#2ca35c;font-size:11px;font-weight:800;margin-top:3px;">' + escHtml(discText) + '</div>'
+      : '';
+    return '<div style="background:#c9edf9;padding:15px 20px;border-radius:12px;text-align:center;margin-top:15px;' + MF + '">' +
+      '<div style="font-size:13px;color:#3e4a50;margin-bottom:5px;">' + escHtml(summaryText) + '</div>' +
+      '<div style="font-size:24px;line-height:1.1;font-weight:900;color:' + ACCENT + ';">' + escHtml(totalText) + '</div>' +
+      disc +
+      '</div>';
+  };
+
+  var contactHTML = function() {
+    var nm = managerName || 'Не указано';
+    var ph = managerPhone || '';
+    var em = managerEmail || '';
+    return '<div style="margin-top:10px;padding:15px 20px;border:1px solid #ddd;border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:16px;' + MF + '">' +
+      '<div style="flex:1;">' +
+        '<div style="font-size:16px;color:' + ACCENT + ';font-weight:900;line-height:1;">Ваш менеджер</div>' +
+        '<div style="font-size:13px;color:#333;font-weight:700;line-height:1.2;margin-top:2px;">' + escHtml(nm) + '</div>' +
+        (ph ? '<div style="font-size:13px;color:#333;line-height:1.2;">' + escHtml(ph) + '</div>' : '') +
+        (em ? '<div style="font-size:12px;color:#666;line-height:1.2;">' + escHtml(em) + '</div>' : '') +
+      '</div>' +
+      '<a class="pdf-service-link" href="https://astral.ru/products/astral-otchet-5-0/" target="_blank" rel="noopener noreferrer" style="background:#b6e8f7;color:' + ACCENT + ';padding:8px 14px;border-radius:999px;font-size:13px;font-weight:800;white-space:nowrap;text-decoration:none;display:inline-block;">Подробнее о сервисе →</a>' +
+      '</div>';
+  };
+
+  var makeFooterImgsHTML = function(from, count, naturalSizes, scaleFactor) {
+    var contentWidth = PAGE_W - PAD * 2;
+    var footerScale = scaleFactor || 1;
+    var items = assets.footerSrcs.slice(from, from + count).map(function(src, idx) {
+      var nat = naturalSizes[from + idx];
+      var imgW = (nat && nat.w) ? Math.min(Math.round(nat.w / footerScale), contentWidth) : contentWidth;
+      var isLast = idx === count - 1;
+      return '<div style="margin-bottom:' + (isLast ? 0 : FOOTER_GAP) + 'px;">' +
+        '<img src="' + src + '" crossorigin="anonymous" style="display:block;width:' + imgW + 'px;height:auto;">' +
+        '</div>';
+    }).join('');
+    return '<div style="padding:0 ' + PAD + 'px;box-sizing:border-box;">' + items + '</div>';
+  };
+
+  var headerDiv = document.createElement('div');
+  headerDiv.style.cssText = 'width:' + PAGE_W + 'px;background:#fff;';
+  var headerNaturalW = PAGE_W;
+  if (assets.headerSrc) {
+    var headerImg = document.createElement('img');
+    headerImg.src = assets.headerSrc;
+    headerImg.style.cssText = 'width:' + PAGE_W + 'px;display:block;';
+    headerDiv.appendChild(headerImg);
+  }
+  mount(headerDiv);
+  await Promise.all(Array.from(headerDiv.querySelectorAll('img')).map(waitImg));
+  await new Promise(function(r){ setTimeout(r, 100); });
+  if (assets.headerSrc && headerDiv.querySelector('img')) {
+    var loadedHeader = headerDiv.querySelector('img');
+    if (loadedHeader && loadedHeader.naturalWidth) headerNaturalW = loadedHeader.naturalWidth;
+  }
+  var canvasHeader = await toCanvas(headerDiv);
+  unmount(headerDiv);
+  var headerH = Math.round(PAGE_W * canvasHeader.height / canvasHeader.width);
+  var ASSET_SCALE = headerNaturalW / PAGE_W;
+  if (!isFinite(ASSET_SCALE) || ASSET_SCALE < 1) ASSET_SCALE = 1;
+
+  var contentWidth = PAGE_W - PAD * 2;
+  var footerNaturalSizes = await Promise.all(assets.footerSrcs.map(function(src) {
+    return new Promise(function(res) {
+      var img = new Image();
+      img.onload = function(){ res({ w: img.naturalWidth, h: img.naturalHeight }); };
+      img.onerror = function(){ res({ w: 0, h: 0 }); };
+      img.src = src;
+    });
+  }));
+  var footerDisplayHeights = footerNaturalSizes.map(function(sz) {
+    if (!sz.w) return 0;
+    var dw = Math.min(Math.round(sz.w / ASSET_SCALE), contentWidth);
+    return Math.round(sz.h * dw / sz.w);
+  });
+
+  var titleH = measureHeight('<div style="padding:20px ' + PAD + 'px 0;' + MF + '"><h2 style="color:' + ACCENT + ';font-size:15px;margin:0 0 10px 0;font-weight:800;">Стоимость подключения:</h2></div>');
+
+  var rowHeights = lines.map(function(line) {
+    return measureHeight('<div style="width:' + PAGE_W + 'px;padding:0 ' + PAD + 'px;box-sizing:border-box;' + MF + '"><table style="width:100%;border-collapse:collapse;"><tbody>' + rowHTML(line) + '</tbody></table></div>');
+  });
+
+  var summaryOnlyHTML = '<div style="padding:0 ' + PAD + 'px 10px;' + MF + '">' + summaryHTML() + '</div>';
+  var contactOnlyHTML = '<div style="padding:0 ' + PAD + 'px 10px;' + MF + '">' + contactHTML() + '</div>';
+  var summaryBlockHTML = '<div style="padding:0 ' + PAD + 'px 10px;' + MF + '">' + summaryHTML() + contactHTML() + '</div>';
+
+  var summaryOnlyH = measureHeight(summaryOnlyHTML);
+  var contactOnlyH = measureHeight(contactOnlyHTML);
+  var summaryBlockH = summaryOnlyH + contactOnlyH;
+
+  var availableP1 = PAGE_H - headerH - 30;
+  var availableRest = PAGE_H - 30;
+  var pages = [];
+  var remaining = lines.slice();
+  var isFirstPage = true;
+
+  while (remaining.length > 0 || pages.length === 0) {
+    var available = isFirstPage ? availableP1 : availableRest;
+    var overhead = isFirstPage ? titleH : 30;
+    var used = overhead;
+    var pageLines = [];
+
+    for (var li = 0; li < remaining.length; li++) {
+      var rowIdx = lines.length - remaining.length + li;
+      if (used + rowHeights[rowIdx] <= available) {
+        used += rowHeights[rowIdx];
+        pageLines.push(remaining[li]);
+      } else {
+        break;
+      }
+    }
+    if (!pageLines.length && remaining.length) {
+      pageLines.push(remaining[0]);
+      used += rowHeights[lines.length - remaining.length];
+    }
+
+    remaining = remaining.slice(pageLines.length);
+    var isLast = remaining.length === 0;
+    var summaryOnThisPage = false;
+    if (isLast) {
+      if (used + summaryBlockH <= available) summaryOnThisPage = 'full';
+      else if (used + summaryOnlyH <= available) summaryOnThisPage = 'summary-only';
+    }
+
+    var addedH = summaryOnThisPage === 'full' ? summaryBlockH : (summaryOnThisPage === 'summary-only' ? summaryOnlyH : 0);
+    pages.push({ lines: pageLines, isFirst: isFirstPage, isLast: isLast, summaryOnThisPage: summaryOnThisPage, usedH: used + addedH });
+    isFirstPage = false;
+    if (isLast) break;
+  }
+
+  var lastPage = pages[pages.length - 1];
+  if (!lastPage.summaryOnThisPage) {
+    if (summaryBlockH + 30 <= availableRest) {
+      pages.push({ lines: [], isFirst: false, isLast: true, summaryOnThisPage: 'full', usedH: summaryBlockH + 30 });
+    } else {
+      pages.push({ lines: [], isFirst: false, isLast: false, summaryOnThisPage: 'summary-only', usedH: summaryOnlyH + 30 });
+      pages.push({ lines: [], isFirst: false, isLast: true, summaryOnThisPage: 'contact-only', usedH: contactOnlyH + 30 });
+    }
+  } else if (lastPage.summaryOnThisPage === 'summary-only') {
+    pages.push({ lines: [], isFirst: false, isLast: true, summaryOnThisPage: 'contact-only', usedH: contactOnlyH + 30 });
+  }
+
+  var finalPage = pages[pages.length - 1];
+  var availableForFooter = (finalPage.isFirst ? availableP1 : availableRest) - finalPage.usedH - BOTTOM_PAD;
+  var footerOnLastPage = 0;
+  var accumulated = 0;
+  for (var fi = 0; fi < footerDisplayHeights.length; fi++) {
+    if (!footerDisplayHeights[fi]) continue;
+    var gap = footerOnLastPage > 0 ? FOOTER_GAP : 0;
+    if (accumulated + gap + footerDisplayHeights[fi] <= availableForFooter) {
+      accumulated += gap + footerDisplayHeights[fi];
+      footerOnLastPage = fi + 1;
+    } else {
+      break;
+    }
+  }
+  var footerOnExtraPage = assets.footerSrcs.length - footerOnLastPage;
+
+  var canvases = [];
+  var linkRects = [];
+  for (var pi = 0; pi < pages.length; pi++) {
+    var pg = pages[pi];
+    var isLastPg = pi === pages.length - 1;
+    var div = document.createElement('div');
+    div.style.cssText = 'width:' + PAGE_W + 'px;background:#fff;';
+    var tableRows = pg.lines.map(rowHTML).join('');
+    var tableHTML = tableRows
+      ? '<div style="padding:' + (pg.isFirst ? '20px' : '30px') + ' ' + PAD + 'px 0;' + MF + '">' +
+          (pg.isFirst ? '<h2 style="color:' + ACCENT + ';font-size:15px;margin:0 0 10px 0;font-weight:800;">Стоимость подключения:</h2>' : '') +
+          '<table style="width:100%;border-collapse:collapse;"><tbody>' + tableRows + '</tbody></table>' +
+        '</div>'
+      : '';
+
+    var summaryRendered = '';
+    if (pg.summaryOnThisPage === 'full') summaryRendered = summaryBlockHTML;
+    else if (pg.summaryOnThisPage === 'summary-only') summaryRendered = summaryOnlyHTML;
+    else if (pg.summaryOnThisPage === 'contact-only') summaryRendered = contactOnlyHTML;
+
+    var footerHTML = (isLastPg && footerOnLastPage > 0)
+      ? '<div style="margin-top:' + BOTTOM_PAD + 'px;">' + makeFooterImgsHTML(0, footerOnLastPage, footerNaturalSizes, ASSET_SCALE) + '</div>'
+      : '';
+    div.innerHTML = tableHTML + summaryRendered + footerHTML;
+
+    mount(div);
+    await Promise.all(Array.from(div.querySelectorAll('img')).map(waitImg));
+    var linkRect = null;
+    var linkEl = div.querySelector('.pdf-service-link');
+    if (linkEl) {
+      var hostRect = div.getBoundingClientRect();
+      var anchorRect = linkEl.getBoundingClientRect();
+      linkRect = {
+        x: anchorRect.left - hostRect.left,
+        y: anchorRect.top - hostRect.top,
+        w: anchorRect.width,
+        h: anchorRect.height
+      };
+    }
+    await new Promise(function(r){ setTimeout(r, 150); });
+    var canvas = await toCanvas(div);
+    canvases.push(canvas);
+    linkRects.push(linkRect);
+    unmount(div);
+  }
+
+  var canvasExtraFooter = null;
+  if (footerOnExtraPage > 0) {
+    var divF = document.createElement('div');
+    divF.style.cssText = 'width:' + PAGE_W + 'px;background:#fff;padding-top:40px;box-sizing:border-box;';
+    divF.innerHTML = makeFooterImgsHTML(footerOnLastPage, footerOnExtraPage, footerNaturalSizes, ASSET_SCALE);
+    mount(divF);
+    await Promise.all(Array.from(divF.querySelectorAll('img')).map(waitImg));
+    await new Promise(function(r){ setTimeout(r, 150); });
+    canvasExtraFooter = await toCanvas(divF);
+    unmount(divF);
+  }
+
+  if (!canvases.length) throw new Error('Не удалось сформировать страницы PDF');
+  var pdf = new jsPDFClass({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+  var PW = pdf.internal.pageSize.getWidth();
+  var addServiceLink = function(canvas, rectPx, yOffsetPt) {
+    if (!rectPx) return;
+    // rectPx измеряется в CSS-пикселях контейнера шириной PAGE_W
+    var k = PW / PAGE_W;
+    var x = rectPx.x * k;
+    var y = yOffsetPt + rectPx.y * k;
+    var w = rectPx.w * k;
+    var h = rectPx.h * k;
+    pdf.link(x, y, w, h, { url: 'https://astral.ru/' });
+  };
+  var headerHpt = PW * (canvasHeader.height / canvasHeader.width);
+  pdf.addImage(canvasHeader.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, PW, headerHpt);
+  pdf.addImage(canvases[0].toDataURL('image/jpeg', 1.0), 'JPEG', 0, headerHpt, PW, PW * (canvases[0].height / canvases[0].width));
+  addServiceLink(canvases[0], linkRects[0], headerHpt);
+
+  for (var ci = 1; ci < canvases.length; ci++) {
+    pdf.addPage();
+    pdf.addImage(canvases[ci].toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, PW, PW * (canvases[ci].height / canvases[ci].width));
+    addServiceLink(canvases[ci], linkRects[ci], 0);
+  }
+
+  if (canvasExtraFooter) {
+    pdf.addPage();
+    pdf.addImage(canvasExtraFooter.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, PW, PW * (canvasExtraFooter.height / canvasExtraFooter.width));
+  }
+
+  var safe = clientName.replace(/[^а-яёА-ЯЁa-zA-Z0-9 _-]/g, '').trim();
+  var modeName = mode === 'ub' ? 'УБ' : 'Обычное';
+  pdf.save(safe ? ('КП_АО5_' + modeName + '_' + safe + '.pdf') : ('КП_АО5_' + modeName + '.pdf'));
+}
+
 // ── Public API ────────────────────────────────────────────────────────────
 var CalcApp = {
   selectCard: function(cardId){
@@ -520,7 +897,7 @@ document.addEventListener('DOMContentLoaded', function(){
       b.classList.add('active'); S.top=b.dataset.top; render(); refreshAddonRows();
     };
   });
-  $('btn-pdf').onclick=function(){ alert('PDF будет доступен в следующей версии.'); };
+  initPDF();
   loadData();
 });
 
