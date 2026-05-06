@@ -544,6 +544,7 @@ async function buildPDF() {
   var totalText = (($('r-price') && $('r-price').innerText) || '').trim();
   var discText = (($('r-disc') && $('r-disc').innerText) || '').trim();
   var clientName = (($('c-client') && $('c-client').value) || '').trim();
+  var partnerOrg = (($('c-org') && $('c-org').value) || '').trim();
   var managerName = (($('c-name') && $('c-name').value) || '').trim();
   var managerPhone = (($('c-phone') && $('c-phone').value) || '').trim();
   var managerEmail = (($('c-email') && $('c-email').value) || '').trim();
@@ -629,8 +630,9 @@ async function buildPDF() {
         '<div style="font-size:13px;color:#333;font-weight:700;line-height:1.2;margin-top:2px;">' + escHtml(nm) + '</div>' +
         (ph ? '<div style="font-size:13px;color:#333;line-height:1.2;">' + escHtml(ph) + '</div>' : '') +
         (em ? '<div style="font-size:12px;color:#666;line-height:1.2;">' + escHtml(em) + '</div>' : '') +
+        (partnerOrg ? '<div style="font-size:12px;color:#666;line-height:1.2;">' + escHtml(partnerOrg) + '</div>' : '') +
       '</div>' +
-      '<a class="pdf-service-link" href="https://astral.ru/products/astral-otchet-5-0/" target="_blank" rel="noopener noreferrer" style="background:#b6e8f7;color:' + ACCENT + ';padding:8px 14px;border-radius:999px;font-size:13px;font-weight:800;white-space:nowrap;text-decoration:none;display:inline-block;">Подробнее о сервисе →</a>' +
+      '<a class="pdf-service-link" href="https://astral.ru/products/astral-otchet-5-0/?utm_source=kp&utm_medium=clients" target="_blank" rel="noopener noreferrer" style="background:#b6e8f7;color:' + ACCENT + ';padding:8px 14px;border-radius:999px;font-size:13px;font-weight:800;white-space:nowrap;text-decoration:none;display:inline-block;">Подробнее о сервисе →</a>' +
       '</div>';
   };
 
@@ -836,7 +838,7 @@ async function buildPDF() {
     var y = yOffsetPt + rectPx.y * k;
     var w = rectPx.w * k;
     var h = rectPx.h * k;
-    pdf.link(x, y, w, h, { url: 'https://astral.ru/' });
+    pdf.link(x, y, w, h, { url: 'https://astral.ru/products/astral-otchet-5-0/?utm_source=kp&utm_medium=clients' });
   };
   var headerHpt = PW * (canvasHeader.height / canvasHeader.width);
   pdf.addImage(canvasHeader.toDataURL('image/jpeg', 1.0), 'JPEG', 0, 0, PW, headerHpt);
