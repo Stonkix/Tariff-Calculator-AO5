@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Калькулятор Астрал.ОФД (АО5)
  */
 (function () {
@@ -70,7 +70,7 @@ const S = {
   solo: { reg: '', own: 'ul', cardId: null, durId: null },
   fast: { rows: [{ id: 1, reg: '', ul: 1, ip: 0 }] },
   det:  { cards: [newDetCard()], exist: 0 },
-  ub:   { reg: '', orgs: 1, reports: 0 },
+  ub:   { reg: '', reports: 0 },
 };
 
 function newDetCard() {
@@ -91,10 +91,115 @@ function tariffPrice(row, tariffId, own) {
 function gkRange(n) { return GK_RANGES.find(function(r){ return n >= r.min && n <= r.max; }); }
 function gkLabel(n) { const r = gkRange(n); if(!r) return ''; return r.max===Infinity ? r.min+'+' : r.min+'–'+r.max; }
 
-function regOpts(sel) {
-  sel = sel || '';
-  return '<option value="" disabled'+(sel?'':' selected')+'>Выберите регион</option>' +
-    DATA.map(function(t){ return '<option value="'+t.Column1+'"'+(sel===t.Column1?' selected':'')+'>'+t.Column2+'</option>'; }).join('');
+function sortedRegions() {
+  return DATA.slice().sort(function(a, b){
+    var aName = String((a && a.Column2) || '');
+    var bName = String((b && b.Column2) || '');
+    var aLow = aName.toLowerCase();
+    var bLow = bName.toLowerCase();
+    var aRank = aLow.indexOf('москва') !== -1 ? 0 : (aLow.indexOf('санкт-петербург') !== -1 ? 1 : 2);
+    var bRank = bLow.indexOf('москва') !== -1 ? 0 : (bLow.indexOf('санкт-петербург') !== -1 ? 1 : 2);
+    if (aRank !== bRank) return aRank - bRank;
+    return aName.localeCompare(bName, 'ru', { sensitivity: 'base' });
+  });
+}
+
+function buildRegSelect(selVal, onChange) {
+  selVal = selVal || '';
+  var regions = sortedRegions();
+  var selectedName = '';
+  if (selVal) {
+    var selRow = regions.find(function(t){ return t.Column1 === selVal; });
+    if (selRow) selectedName = selRow.Column2;
+  }
+
+  var wrap = document.createElement('div');
+  wrap.className = 'reg-wrap';
+
+  var display = document.createElement('div');
+  display.className = 'reg-display' + (selVal ? '' : ' placeholder');
+  display.setAttribute('tabindex', '0');
+  var displayText = document.createElement('span');
+  displayText.textContent = selectedName || 'Выберите регион';
+  display.appendChild(displayText);
+
+  var dropdown = document.createElement('div');
+  dropdown.className = 'reg-dropdown';
+
+  var searchWrap = document.createElement('div');
+  searchWrap.className = 'reg-search-wrap';
+  var searchInp = document.createElement('input');
+  searchInp.type = 'text';
+  searchInp.className = 'reg-search';
+  searchInp.placeholder = 'Поиск региона...';
+  searchWrap.appendChild(searchInp);
+
+  var list = document.createElement('div');
+  list.className = 'reg-list';
+
+  var noRes = document.createElement('div');
+  noRes.className = 'reg-opt no-results hidden';
+  noRes.textContent = 'Ничего не найдено';
+  list.appendChild(noRes);
+
+  regions.forEach(function(t){
+    var opt = document.createElement('div');
+    opt.className = 'reg-opt' + (t.Column1 === selVal ? ' selected' : '');
+    opt.dataset.val = t.Column1;
+    opt.textContent = t.Column2;
+    opt.onclick = function(){
+      selVal = t.Column1;
+      displayText.textContent = t.Column2;
+      display.classList.remove('placeholder');
+      list.querySelectorAll('.reg-opt').forEach(function(o){ o.classList.remove('selected'); });
+      opt.classList.add('selected');
+      closeDropdown();
+      onChange(t.Column1);
+    };
+    list.appendChild(opt);
+  });
+
+  dropdown.appendChild(searchWrap);
+  dropdown.appendChild(list);
+  wrap.appendChild(display);
+  wrap.appendChild(dropdown);
+
+  function openDropdown() {
+    wrap.classList.add('open');
+    searchInp.value = '';
+    filterList('');
+    var sel = list.querySelector('.selected');
+    if (sel) setTimeout(function(){ sel.scrollIntoView({ block: 'nearest' }); }, 0);
+    setTimeout(function(){ searchInp.focus(); }, 0);
+  }
+  function closeDropdown() {
+    wrap.classList.remove('open');
+  }
+  function filterList(q) {
+    q = q.toLowerCase();
+    var opts = list.querySelectorAll('.reg-opt:not(.no-results)');
+    var visible = 0;
+    opts.forEach(function(o){
+      var match = o.textContent.toLowerCase().indexOf(q) !== -1;
+      o.classList.toggle('hidden', !match);
+      if (match) visible++;
+    });
+    noRes.classList.toggle('hidden', visible > 0);
+  }
+
+  display.onclick = function(){ wrap.classList.contains('open') ? closeDropdown() : openDropdown(); };
+  display.onkeydown = function(e){
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openDropdown(); }
+    if (e.key === 'Escape') closeDropdown();
+  };
+  searchInp.oninput = function(){ filterList(searchInp.value); };
+  searchInp.onkeydown = function(e){ if (e.key === 'Escape') closeDropdown(); };
+
+  document.addEventListener('click', function(e){
+    if (!wrap.contains(e.target)) closeDropdown();
+  });
+
+  return wrap;
 }
 
 // Эффективный tariffId для Solo: если карточка с вариантами — durId, иначе cardId
@@ -141,9 +246,12 @@ function render() {
 // ── Solo ──────────────────────────────────────────────────────────────────
 function renderSolo(dyn) {
   var n = $('tpl-solo').content.cloneNode(true);
+  // Заменяем нативный select на кастомный с поиском
   var regSel = n.getElementById('sol-reg');
-  regSel.innerHTML = regOpts(S.solo.reg);
-  regSel.onchange = function(e){ S.solo.reg=e.target.value; refreshTariffCards(); refreshAddonRows(); calc(); };
+  var regWrap = buildRegSelect(S.solo.reg, function(val){
+    S.solo.reg = val; refreshTariffCards(); refreshAddonRows(); calc();
+  });
+  regSel.parentNode.replaceChild(regWrap, regSel);
   n.querySelectorAll('#sol-own .tb').forEach(function(b){
     b.classList.toggle('active', b.dataset.v===S.solo.own);
     b.onclick=function(){
@@ -249,21 +357,21 @@ function renderGKInner() {
 
 function renderFast(cont) {
   var n=$('tpl-fast').content.cloneNode(true);
-  // скрываем строку тарифа
   var tr=n.getElementById('gk-tariff-row'); if(tr) tr.style.display='none';
 
   var rows=n.getElementById('fr-rows');
   S.fast.rows.forEach(function(r){
     var d=document.createElement('div'); d.className='ft-row';
-    d.innerHTML=
-      '<select onchange="CalcApp.updFast('+r.id+',\'reg\',this.value)">'+regOpts(r.reg)+'</select>'+
-      '<input type="number" value="'+r.ul+'" min="0" placeholder="0"'+
-             ' oninput="CalcApp.updFast('+r.id+',\'ul\',this.value)"'+
-             ' onkeydown="if([\'-\',\'e\',\'E\',\',\',\'.\'].includes(event.key))event.preventDefault();">'+
-      '<input type="number" value="'+r.ip+'" min="0" placeholder="0"'+
-             ' oninput="CalcApp.updFast('+r.id+',\'ip\',this.value)"'+
-             ' onkeydown="if([\'-\',\'e\',\'E\',\',\',\'.\'].includes(event.key))event.preventDefault();">'+
-      '<button class="btn-rm" onclick="CalcApp.rmFast('+r.id+')">×</button>';
+    var regWrap = buildRegSelect(r.reg, function(val){ CalcApp.updFast(r.id,'reg',val); });
+    var ulInp=document.createElement('input'); ulInp.type='number'; ulInp.value=r.ul; ulInp.min='0'; ulInp.placeholder='0';
+    ulInp.oninput=function(){ CalcApp.updFast(r.id,'ul',this.value); };
+    ulInp.onkeydown=function(e){ if(['-','e','E',',','.'].includes(e.key)) e.preventDefault(); };
+    var ipInp=document.createElement('input'); ipInp.type='number'; ipInp.value=r.ip; ipInp.min='0'; ipInp.placeholder='0';
+    ipInp.oninput=function(){ CalcApp.updFast(r.id,'ip',this.value); };
+    ipInp.onkeydown=function(e){ if(['-','e','E',',','.'].includes(e.key)) e.preventDefault(); };
+    var rmBtn=document.createElement('button'); rmBtn.className='btn-rm'; rmBtn.innerHTML='&times;';
+    rmBtn.onclick=function(){ CalcApp.rmFast(r.id); };
+    d.appendChild(regWrap); d.appendChild(ulInp); d.appendChild(ipInp); d.appendChild(rmBtn);
     rows.appendChild(d);
   });
   n.getElementById('btn-add-fast').onclick=CalcApp.addFast;
@@ -298,9 +406,7 @@ function renderDetailed(cont, showExist) {
 
     // Регион + ЮЛ/ИП
     var row2=document.createElement('div'); row2.className='g2'; row2.style.marginBottom='10px';
-    var selReg=document.createElement('select'); selReg.className='cc-inner-select';
-    selReg.innerHTML=regOpts(c.reg);
-    selReg.onchange=function(e){ var x=getCard(c.id); if(x){ x.reg=e.target.value; calc(); } };
+    var regWrap2=buildRegSelect(c.reg, (function(cid){ return function(val){ var x=getCard(cid); if(x){ x.reg=val; calc(); } }; })(c.id));
     var tg=document.createElement('div'); tg.className='tg cc-own';
     ['ul','ip'].forEach(function(v){
       var b=document.createElement('button'); b.className='tb'+(c.own===v?' active':'');
@@ -308,7 +414,7 @@ function renderDetailed(cont, showExist) {
       b.onclick=function(){ var x=getCard(c.id); if(!x) return; x.own=v; renderGKInner(); };
       tg.appendChild(b);
     });
-    row2.appendChild(selReg); row2.appendChild(tg); wrap.appendChild(row2);
+    row2.appendChild(regWrap2); row2.appendChild(tg); wrap.appendChild(row2);
 
     // Доп. направления — раскрывающийся блок
     var extBtn=document.createElement('button'); extBtn.className='cc-ext-toggle';
@@ -348,10 +454,22 @@ function getCard(id){ return S.det.cards.find(function(c){ return c.id===id; });
 // ── УБ ────────────────────────────────────────────────────────────────────
 function renderUB(dyn) {
   var n=$('tpl-ub').content.cloneNode(true);
-  n.getElementById('ub-reg').innerHTML=regOpts(S.ub.reg);
-  n.getElementById('ub-reg').onchange=function(e){ S.ub.reg=e.target.value; calc(); };
-  n.getElementById('ub-orgs').value=S.ub.orgs;
-  n.getElementById('ub-orgs').oninput=function(e){ S.ub.orgs=parseInt(e.target.value)||0; calc(); };
+  var ubRegSel = n.getElementById('ub-reg');
+  var ubRegWrap = buildRegSelect(S.ub.reg, function(val){ S.ub.reg = val; calc(); });
+  ubRegSel.parentNode.replaceChild(ubRegWrap, ubRegSel);
+
+  var ubOrgs = n.getElementById('ub-orgs');
+  if (ubOrgs) {
+    var orgRow = ubOrgs.closest('.frow');
+    if (orgRow && orgRow.parentNode) orgRow.parentNode.removeChild(orgRow);
+  }
+
+  var ubReports = n.getElementById('ub-reports');
+  if (ubReports) {
+    var repRow = ubReports.closest('.frow');
+    var repLabel = repRow ? repRow.querySelector('label') : null;
+    if (repLabel) repLabel.textContent = 'Количество отчётов в квартал';
+  }
   n.getElementById('ub-reports').value=S.ub.reports;
   n.getElementById('ub-reports').oninput=function(e){ S.ub.reports=parseInt(e.target.value)||0; calc(); };
   dyn.appendChild(n);
@@ -429,21 +547,21 @@ function calc() {
     var ubRow=DMAP[S.ub.reg];
     if(ubRow){
       var lic=p(ubRow,'Уполномоченная бухгалтерия'); total+=lic;
-      lines.push('Лицензия УБ · '+ubRow.Column2+' | '+fmt(lic));
+      lines.push('\u041b\u0438\u0446\u0435\u043d\u0437\u0438\u044f \u0423\u0411 (\u0432 \u0433\u043e\u0434) \u00b7 '+ubRow.Column2+' | '+fmt(lic));
       var rc=S.ub.reports||0;
       if(rc>0){
         var rk=rc<=200?'Column35':rc<=500?'Column36':rc<=1000?'Column37':'Column38';
         var rate=p(ubRow,rk), minP=p(ubRow,'Column39'), rawFee=rate*rc, fee=Math.max(rawFee,minP);
-        var minNote=(minP>0&&rawFee<minP)?' (минимальный платеж)':'';
-        total+=fee; lines.push('Отчёты · '+rc+' шт. × '+fmt(rate)+' | '+fmt(fee)+minNote);
+        var minNote=(minP>0&&rawFee<minP)?' (\u043c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u044b\u0439 \u043f\u043b\u0430\u0442\u0451\u0436 \u0437\u0430 \u043a\u0432\u0430\u0440\u0442\u0430\u043b)':'';
+        total+=fee; lines.push('\u041e\u0442\u043f\u0440\u0430\u0432\u043a\u0430 \u043e\u0442\u0447\u0451\u0442\u043e\u0432 (\u0432 \u043a\u0432\u0430\u0440\u0442\u0430\u043b) \u00b7 '+rc+' \u0448\u0442. \u00d7 '+fmt(rate)+' | '+fmt(fee)+minNote);
       }
       var info=$('ub-info');
       if(info){
         var r35=p(ubRow,'Column35'),r36=p(ubRow,'Column36'),r37=p(ubRow,'Column37'),r38=p(ubRow,'Column38'),r39=p(ubRow,'Column39');
         info.style.display='';
-        info.innerHTML='<b>Ставки за отчёт · '+ubRow.Column2+':</b><br>'+
-          '1–200: <b>'+fmt(r35)+'</b>/отч. &nbsp;·&nbsp; 201–500: <b>'+fmt(r36)+'</b>/отч. &nbsp;·&nbsp; 501–1000: <b>'+fmt(r37)+'</b>/отч. &nbsp;·&nbsp; 1001+: <b>'+fmt(r38)+'</b>/отч.<br>'+
-          'Минимальный платёж: <b>'+fmt(r39)+'</b>/мес.';
+        info.innerHTML='<b>\u0421\u0442\u0430\u0432\u043a\u0438 \u0437\u0430 \u043e\u0442\u0447\u0451\u0442 (\u0432 \u043a\u0432\u0430\u0440\u0442\u0430\u043b) \u00b7 '+ubRow.Column2+':</b><br>'+
+          '1\u2013200: <b>'+fmt(r35)+'</b>/\u043e\u0442\u0447. &nbsp;\u00b7&nbsp; 201\u2013500: <b>'+fmt(r36)+'</b>/\u043e\u0442\u0447. &nbsp;\u00b7&nbsp; 501\u20131000: <b>'+fmt(r37)+'</b>/\u043e\u0442\u0447. &nbsp;\u00b7&nbsp; 1001+: <b>'+fmt(r38)+'</b>/\u043e\u0442\u0447.<br>'+
+          '\u041c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u044b\u0439 \u043f\u043b\u0430\u0442\u0451\u0436: <b>'+fmt(r39)+'</b>/\u043a\u0432\u0430\u0440\u0442\u0430\u043b';
       }
     } else {
       lines.push('Выберите регион для расчёта.');
