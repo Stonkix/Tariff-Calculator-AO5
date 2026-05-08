@@ -30,7 +30,7 @@ const TARIFF_CARDS = [
   { id: 'tre_o', name: 'Базовый',    sub: 'Любая СНО, 3 направления · 12 мес',  owns: ['ul']       },
   { id: 'tre_s', name: 'Упрощенный', sub: 'Спецрежимы, 3 направления · 12 мес', owns: ['ul','ip']  },
   { id: 'uno',   name: 'Минимальный',sub: 'Любая СНО, 1 направление · 12 мес',  owns: ['ul','ip']  },
-  { id: 'zero',  name: 'Нулёвка',    sub: 'Нулевая отчётность · 12 мес',        owns: ['ul','ip']  },
+  { id: 'zero',  name: 'Нулёвка',    sub: 'Любая СНО, 4 направления, нулевая отчетность в ФНС · 12 мес',        owns: ['ul','ip']  },
 ];
 
 const GK_RANGES = [
@@ -494,7 +494,7 @@ function calc() {
         var durOpt=card&&card.durations&&card.durations.find(function(d){ return d.id===effId; });
         var tName=card?card.name:effId;
         var durLbl=durOpt?' · '+durOpt.label:'';
-        lines.push(tName+durLbl+' | '+S.solo.own.toUpperCase()+' | '+row.Column2+' | '+fmt(pr));
+        lines.push(tName+durLbl+' | '+(S.solo.own==='ul'?'ЮЛ':'ИП')+' | '+row.Column2+' | '+fmt(pr));
       } else {
         lines.push('Выбранный тариф недоступен для данного типа организации.');
       }
@@ -531,7 +531,7 @@ function calc() {
         var row3=DMAP[c.reg]; if(!row3) return;
         var gp3=p(row3,keys[c.own]); total+=gp3; gkDisc+=gp3;
         var lbl=c.name||'Организация';
-        lines.push(lbl+' | '+c.own.toUpperCase()+' · '+row3.Column2+' | '+rangeLbl+' | '+fmt(gp3));
+        lines.push(lbl+' | '+(c.own==='ul'?'ЮЛ':'ИП')+' · '+row3.Column2+' | '+rangeLbl+' | '+fmt(gp3));
         EXT_DEFS.forEach(function(ef){
           var cnt2=c[ef.field]||0; if(!cnt2) return;
           var pr2=p(row3,ef.col); total+=pr2*cnt2;
