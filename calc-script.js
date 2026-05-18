@@ -70,7 +70,8 @@ const S = {
   solo: { reg: '', own: 'ul', cardId: null, durId: null },
   fast: { rows: [{ id: 1, reg: '', ul: 1, ip: 0 }] },
   det:  { cards: [newDetCard()], exist: 0 },
-  ub:   { reg: '', reports: 0 },
+  ub:   { reg: '', reports: 0, billing: 'quarter', applyMinFirstQ: true },
+  extraServices: { rows: [newExtraServiceRow()] },
 };
 
 function newDetCard() {
@@ -78,10 +79,15 @@ function newDetCard() {
            extIp: 0, extUl: 0, extIfns: 0, extStat: 0, extFsrar: 0, extOpen: false };
 }
 
+function newExtraServiceRow() {
+  return { id: Date.now() + Math.random(), name: '', qty: 0, price: 0 };
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 const fmt = v => Math.round(v).toLocaleString('ru-RU') + ' ₽';
 const $   = id => document.getElementById(id);
 const p   = (row, key) => key && row ? (parseInt(row[key]) || 0) : 0;
+const ownLabel = own => own === 'ul' ? 'ЮЛ' : 'ИП';
 
 function tariffPrice(row, tariffId, own) {
   const col = TARIFF_MAP[tariffId] && TARIFF_MAP[tariffId][own];
@@ -240,6 +246,7 @@ function render() {
   if      (S.top==='solo') renderSolo(dyn);
   else if (S.top==='gk')   renderGK(dyn);
   else                     renderUB(dyn);
+  renderExtraServicesRows();
   calc();
 }
 
@@ -277,6 +284,33 @@ function refreshAddonRows() {
   var rowUl = document.getElementById('vrow-ext-ul');
   if (rowIp) rowIp.style.display = S.solo.own === 'ip' ? '' : 'none';
   if (rowUl) rowUl.style.display = S.solo.own === 'ul' ? '' : 'none';
+}
+
+function renderExtraServicesRows() {
+  var list = $('extra-services-list');
+  if (!list) return;
+  list.innerHTML = '';
+  S.extraServices.rows.forEach(function(row){
+    var wrap = document.createElement('div');
+    wrap.className = 'extra-service-grid extra-service-row';
+    wrap.innerHTML =
+      '<input type="text" class="extra-service-input" placeholder="Наименование услуги">' +
+      '<input type="number" class="extra-service-input" min="0" placeholder="0">' +
+      '<input type="number" class="extra-service-input" min="0" placeholder="0">' +
+      '<button type="button" class="extra-service-remove-btn">Удалить</button>';
+    var nameInp = wrap.children[0];
+    var qtyInp = wrap.children[1];
+    var priceInp = wrap.children[2];
+    var rmBtn = wrap.children[3];
+    nameInp.value = row.name || '';
+    qtyInp.value = row.qty || '';
+    priceInp.value = row.price || '';
+    nameInp.oninput = function(e){ row.name = e.target.value || ''; calc(); };
+    qtyInp.oninput = function(e){ row.qty = parseInt(e.target.value, 10) || 0; calc(); };
+    priceInp.oninput = function(e){ row.price = parseInt(e.target.value, 10) || 0; calc(); };
+    rmBtn.onclick = function(){ CalcApp.rmExtraService(row.id); };
+    list.appendChild(wrap);
+  });
 }
 
 function refreshTariffCards() {
@@ -473,6 +507,26 @@ function renderUB(dyn) {
   n.getElementById('ub-reports').value=S.ub.reports;
   n.getElementById('ub-reports').oninput=function(e){ S.ub.reports=parseInt(e.target.value)||0; calc(); };
   dyn.appendChild(n);
+
+  var ubTabsWrap = document.getElementById('ub-billing-tabs');
+  if (ubTabsWrap) {
+    var ubBtns = ubTabsWrap.querySelectorAll('.ub-billing-btn');
+    ubBtns.forEach(function(btn){
+      btn.classList.toggle('active', btn.dataset.v === S.ub.billing);
+      btn.onclick = function(){
+        S.ub.billing = btn.dataset.v;
+        ubBtns.forEach(function(b2){
+          b2.classList.toggle('active', b2.dataset.v === S.ub.billing);
+        });
+        calc();
+      };
+    });
+  }
+  var minPay = document.getElementById('ub-minpay');
+  if (minPay) {
+    minPay.checked = !!S.ub.applyMinFirstQ;
+    minPay.onchange = function(e){ S.ub.applyMinFirstQ = !!e.target.checked; calc(); };
+  }
 }
 
 // ── Calc ──────────────────────────────────────────────────────────────────
@@ -492,9 +546,9 @@ function calc() {
         total+=pr;
         var card=TARIFF_CARDS.find(function(c){ return c.id===S.solo.cardId; });
         var durOpt=card&&card.durations&&card.durations.find(function(d){ return d.id===effId; });
-        var tName=card?card.name:effId;
+        var tName=card?(card.name + (card.sub ? ' ' + card.sub : '')):effId;
         var durLbl=durOpt?' · '+durOpt.label:'';
-        lines.push(tName+durLbl+' | '+(S.solo.own==='ul'?'ЮЛ':'ИП')+' | '+row.Column2+' | '+fmt(pr));
+        lines.push(tName+durLbl+' | '+ownLabel(S.solo.own)+' | '+row.Column2+' | '+fmt(pr));
       } else {
         lines.push('Выбранный тариф недоступен для данного типа организации.');
       }
@@ -531,7 +585,7 @@ function calc() {
         var row3=DMAP[c.reg]; if(!row3) return;
         var gp3=p(row3,keys[c.own]); total+=gp3; gkDisc+=gp3;
         var lbl=c.name||'Организация';
-        lines.push(lbl+' | '+(c.own==='ul'?'ЮЛ':'ИП')+' · '+row3.Column2+' | '+rangeLbl+' | '+fmt(gp3));
+        lines.push(lbl+' | '+ownLabel(c.own)+' · '+row3.Column2+' | '+rangeLbl+' | '+fmt(gp3));
         EXT_DEFS.forEach(function(ef){
           var cnt2=c[ef.field]||0; if(!cnt2) return;
           var pr2=p(row3,ef.col); total+=pr2*cnt2;
@@ -546,22 +600,30 @@ function calc() {
     discEl.textContent='';
     var ubRow=DMAP[S.ub.reg];
     if(ubRow){
-      var lic=p(ubRow,'Уполномоченная бухгалтерия'); total+=lic;
-      lines.push('\u041b\u0438\u0446\u0435\u043d\u0437\u0438\u044f \u0423\u0411 (\u0432 \u0433\u043e\u0434) \u00b7 '+ubRow.Column2+' | '+fmt(lic));
+      var lic=p(ubRow,'Уполномоченная бухгалтерия');
+      total+=lic;
+      lines.push('Лицензия УБ (в год) · '+ubRow.Column2+' | '+fmt(lic));
       var rc=S.ub.reports||0;
       if(rc>0){
         var rk=rc<=200?'Column35':rc<=500?'Column36':rc<=1000?'Column37':'Column38';
-        var rate=p(ubRow,rk), minP=p(ubRow,'Column39'), rawFee=rate*rc, fee=Math.max(rawFee,minP);
-        var minNote=(minP>0&&rawFee<minP)?' (\u043c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u044b\u0439 \u043f\u043b\u0430\u0442\u0451\u0436 \u0437\u0430 \u043a\u0432\u0430\u0440\u0442\u0430\u043b)':'';
-        total+=fee; lines.push('\u041e\u0442\u043f\u0440\u0430\u0432\u043a\u0430 \u043e\u0442\u0447\u0451\u0442\u043e\u0432 (\u0432 \u043a\u0432\u0430\u0440\u0442\u0430\u043b) \u00b7 '+rc+' \u0448\u0442. \u00d7 '+fmt(rate)+' | '+fmt(fee)+minNote);
+        var rate=p(ubRow,rk), minP=p(ubRow,'Column39'), rawFeeQ=rate*rc;
+        var firstQuarterFee = S.ub.applyMinFirstQ ? Math.max(rawFeeQ,minP) : rawFeeQ;
+        var regularQuarterFee = Math.max(rawFeeQ,minP);
+        var reportsFee = S.ub.billing==='year' ? (firstQuarterFee + regularQuarterFee * 3) : firstQuarterFee;
+        var minNote=(S.ub.applyMinFirstQ&&minP>0&&rawFeeQ<minP)?' (мин платеж)':'';
+        total+=reportsFee;
+        var reportsLine = S.ub.billing==='year'
+          ? ('Отправка отчётов (за год) · '+rc+' шт./квартал × 4 квартала × '+fmt(rate)+' | '+fmt(reportsFee))
+          : ('Отправка отчётов (за квартал) · '+rc+' шт. × '+fmt(rate)+' | '+fmt(reportsFee));
+        lines.push(reportsLine+minNote);
       }
       var info=$('ub-info');
       if(info){
         var r35=p(ubRow,'Column35'),r36=p(ubRow,'Column36'),r37=p(ubRow,'Column37'),r38=p(ubRow,'Column38'),r39=p(ubRow,'Column39');
         info.style.display='';
-        info.innerHTML='<b>\u0421\u0442\u0430\u0432\u043a\u0438 \u0437\u0430 \u043e\u0442\u0447\u0451\u0442 (\u0432 \u043a\u0432\u0430\u0440\u0442\u0430\u043b) \u00b7 '+ubRow.Column2+':</b><br>'+
-          '1\u2013200: <b>'+fmt(r35)+'</b>/\u043e\u0442\u0447. &nbsp;\u00b7&nbsp; 201\u2013500: <b>'+fmt(r36)+'</b>/\u043e\u0442\u0447. &nbsp;\u00b7&nbsp; 501\u20131000: <b>'+fmt(r37)+'</b>/\u043e\u0442\u0447. &nbsp;\u00b7&nbsp; 1001+: <b>'+fmt(r38)+'</b>/\u043e\u0442\u0447.<br>'+
-          '\u041c\u0438\u043d\u0438\u043c\u0430\u043b\u044c\u043d\u044b\u0439 \u043f\u043b\u0430\u0442\u0451\u0436: <b>'+fmt(r39)+'</b>/\u043a\u0432\u0430\u0440\u0442\u0430\u043b';
+        info.innerHTML='<b>Ставки за отчёт (в квартал) · '+ubRow.Column2+':</b><br>'+
+          '1–200: <b>'+fmt(r35)+'</b>/отч. &nbsp;·&nbsp; 201–500: <b>'+fmt(r36)+'</b>/отч. &nbsp;·&nbsp; 501–1000: <b>'+fmt(r37)+'</b>/отч. &nbsp;·&nbsp; 1001+: <b>'+fmt(r38)+'</b>/отч.<br>'+
+          'Минимальный платёж: <b>'+fmt(r39)+'</b>/квартал';
       }
     } else {
       lines.push('Выберите регион для расчёта.');
@@ -586,6 +648,8 @@ function calc() {
     total=Math.max(0,total-da);
   }
 
+  total += calcExtraServices(lines);
+
   detailEl.innerText=lines.length?lines.join('\n'):'Введите данные для расчёта...';
   priceEl.textContent=fmt(total);
 }
@@ -599,6 +663,21 @@ function calcGlobalExt(lines){
     if(cnt>0){ var pr=p(row,e.col); add+=pr*cnt; lines.push(e.label+' | '+fmt(pr)+' × '+cnt+' = '+fmt(pr*cnt)); }
   });
   return add;
+}
+
+function calcExtraServices(lines){
+  if(!$('adn-extra')||!$('adn-extra').classList.contains('on')) return 0;
+  var total = 0;
+  S.extraServices.rows.forEach(function(row){
+    var name = (row.name || '').trim();
+    var qty = parseInt(row.qty, 10) || 0;
+    var price = parseInt(row.price, 10) || 0;
+    if(!name || qty <= 0 || price <= 0) return;
+    var sum = qty * price;
+    total += sum;
+    lines.push(name+' | '+fmt(price)+' × '+qty+' = '+fmt(sum));
+  });
+  return total;
 }
 
 // PDF
@@ -1003,6 +1082,16 @@ var CalcApp = {
   updFast: function(id,f,v){ var r=S.fast.rows.find(function(x){ return x.id===id; }); if(r) r[f]=f==='reg'?v:(parseInt(v)||0); calc(); },
   addDet:  function(){ S.det.cards.push(newDetCard()); renderGKInner(); },
   rmDet:   function(id){ if(S.det.cards.length>1){ S.det.cards=S.det.cards.filter(function(x){ return x.id!==id; }); renderGKInner(); } },
+  addExtraService: function(){ S.extraServices.rows.push(newExtraServiceRow()); renderExtraServicesRows(); calc(); },
+  rmExtraService: function(id){
+    if(S.extraServices.rows.length>1){
+      S.extraServices.rows=S.extraServices.rows.filter(function(x){ return x.id!==id; });
+    } else {
+      S.extraServices.rows[0] = newExtraServiceRow();
+    }
+    renderExtraServicesRows();
+    calc();
+  },
   toggleAddon: function(id){ document.getElementById(id).classList.toggle('on'); calc(); },
   setExist: function(n){ S.det.exist=n; calc(); },
   calc: calc,

@@ -103,6 +103,27 @@
         </div>
       </div>
     </div>
+    <div class="addon-grid">
+      <div class="addon-card" id="adn-extra">
+        <div class="addon-hd">
+          <span class="addon-title">Добавление прочих услуг</span>
+          <label class="sw">
+            <input type="checkbox" onchange="CalcApp.toggleAddon('adn-extra')">
+            <span class="sw-t"></span>
+          </label>
+        </div>
+        <div class="addon-variants" id="extra-services-content">
+          <div class="extra-service-grid extra-service-grid-head">
+            <span>Наименование</span>
+            <span>Количество</span>
+            <span>Цена</span>
+            <span></span>
+          </div>
+          <div class="extra-service-list" id="extra-services-list"></div>
+          <button type="button" class="extra-service-add-btn extra-service-add-btn-wide" onclick="CalcApp.addExtraService()">+ Добавить строку</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <div class="details-area">
@@ -228,6 +249,20 @@
       <label>Кол-во отчётов в месяц (прогноз)</label>
       <input type="number" id="ub-reports" min="0" placeholder="0" value="0"
              onkeydown="if(['-','e','E',',','.'].includes(event.key))event.preventDefault();">
+    </div>
+    <div class="ub-billing">
+      <div class="sublabel" style="margin-bottom:8px;">Режим расчета</div>
+      <div class="ub-billing-tabs" id="ub-billing-tabs">
+        <button type="button" class="ub-billing-btn active" data-v="quarter">Квартал</button>
+        <button type="button" class="ub-billing-btn" data-v="year">Год</button>
+      </div>
+      <label class="ub-minpay">
+        <span>Минимальный платеж для 1-го квартала</span>
+        <span class="sw">
+          <input type="checkbox" id="ub-minpay" checked>
+          <span class="sw-t"></span>
+        </span>
+      </label>
     </div>
     <div class="ub-info" id="ub-info" style="display:none;"></div>
   </div>
